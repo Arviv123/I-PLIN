@@ -63,31 +63,28 @@ class IplanMCPServer {
             });
         });
 
-        // MCP endpoint (SSE + JSON-RPC over POST)
-        const transport = new SSEServerTransport('/sse');
-        this.server.connect(transport);
-
-        // CORS preflight
-        this.app.options('/sse', (req, res) => {
-            res.header('Access-Control-Allow-Origin', '*');
-            res.header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-            res.header('Access-Control-Allow-Headers', 'Content-Type');
-            res.sendStatus(204);
-        });
-
-        // SSE stream (GET)
-        this.app.get('/sse', (req, res) => {
-            res.setHeader('Content-Type', 'text/event-stream');
-            res.setHeader('Cache-Control', 'no-cache');
-            res.setHeader('Connection', 'keep-alive');
+        // MCP endpoint - SSE Transport
+        this.app.use('/sse', (req, res, next) => {
+            // Set CORS headers
             res.setHeader('Access-Control-Allow-Origin', '*');
-            transport.handleRequest(req, res);
-        });
-
-        // JSON-RPC messages (POST)
-        this.app.post('/sse', express.json(), (req, res) => {
-            res.setHeader('Access-Control-Allow-Origin', '*');
-            transport.handleRequest(req, res);
+            res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+            res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+            
+            if (req.method === 'OPTIONS') {
+                res.sendStatus(204);
+                return;
+            }
+            
+            // Set SSE headers for GET requests
+            if (req.method === 'GET') {
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.setHeader('Cache-Control', 'no-cache');
+                res.setHeader('Connection', 'keep-alive');
+            }
+            
+            // Create transport for this connection
+            const transport = new SSEServerTransport('/sse', res);
+            this.server.connect(transport);
         });
     }
 
