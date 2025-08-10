@@ -1,0 +1,14 @@
+Instructions for uploading to GitHub:
+
+1. Go to GitHub.com and create a new repository named: iplan-mcp-server
+2. Make it public
+3. Don't add README, .gitignore, or license (we already have them)
+4. Copy the repository URL (should look like: https://github.com/YOUR_USERNAME/iplan-mcp-server.git)
+
+Then run these commands in your terminal:
+
+git remote add origin https://github.com/YOUR_USERNAME/iplan-mcp-server.git
+git branch -M main
+git push -u origin main
+
+Replace YOUR_USERNAME with your actual GitHub username.
