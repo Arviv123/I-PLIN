@@ -981,9 +981,10 @@ class IplanMCPServer {
             }
 
             const data = await response.json();
+            console.log(`📦 Received data structure:`, JSON.stringify(data, null, 2));
             
             if (!data.success) {
-                console.log("No success flag in Base44 response");
+                console.log("❌ No success flag in Base44 response");
                 return;
             }
 
@@ -1251,6 +1252,10 @@ class IplanMCPServer {
             console.log("🚀 Ready to poll for conversations via mcpBridge!");
             
             // Start actual polling now that we have the right endpoints
+            console.log("🔥 Starting first check immediately...");
+            this.checkForNewMessages(); // Check immediately
+            
+            // Then check every 30 seconds
             setInterval(() => {
                 this.checkForNewMessages();
             }, 30000); // Check every 30 seconds
