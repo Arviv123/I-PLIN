@@ -18,7 +18,11 @@
       "WebFetch(domain:ags.iplan.gov.il)",
       "WebFetch(domain:www.iplan.gov.il)",
       "WebFetch(domain:mavat.iplan.gov.il)",
-      "WebFetch(domain:ims.gov.il)"
+      "WebFetch(domain:ims.gov.il)",
+      "WebFetch(domain:i-plin.onrender.com)",
+      "Bash(curl:*)",
+      "Bash(node:*)",
+      "Bash(USE_REAL_API=true node iplan_http_server.js)"
     ],
     "deny": []
   }

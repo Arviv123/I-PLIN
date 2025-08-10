@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "iplan-planning": {
+      "command": "curl",
+      "args": [
+        "-N",
+        "-H", "Accept: text/event-stream",
+        "https://i-plin.onrender.com/sse"
+      ],
+      "env": {}
+    }
+  }
+}
