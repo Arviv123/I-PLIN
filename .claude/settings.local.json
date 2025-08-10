@@ -10,7 +10,14 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(del server.js)",
       "Bash(rm:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(git remote remove:*)",
+      "Bash(git remote add:*)",
+      "Bash(git branch:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:ags.iplan.gov.il)",
+      "WebFetch(domain:www.iplan.gov.il)",
+      "WebFetch(domain:mavat.iplan.gov.il)"
     ],
     "deny": []
   }

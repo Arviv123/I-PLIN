@@ -6,8 +6,8 @@ import fetch from 'node-fetch';
 import express from 'express';
 import cors from 'cors';
 
-// Base URL for Iplan services
-const BASE_URL = "https://ags.iplan.gov.il/arcgisiplan/rest/services";
+// Base URL for Iplan services - Updated URL
+const BASE_URL = "https://ims.gov.il/arcgis/rest/services/IplanPublic";
 
 class IplanMCPServer {
     server;
@@ -39,9 +39,32 @@ class IplanMCPServer {
                 version: '1.0.0',
                 endpoints: {
                     health: '/',
-                    mcp: '/sse'
+                    mcp: '/sse',
+                    test: '/test-iplan'
                 }
             });
+        });
+
+        // Test Iplan connectivity
+        this.app.get('/test-iplan', async (req, res) => {
+            try {
+                const testUrl = `${BASE_URL}/Xplan/MapServer?f=json`;
+                const response = await fetch(testUrl);
+                const data = await response.json();
+                res.json({
+                    status: 'success',
+                    iplan_connectivity: 'working',
+                    url_tested: testUrl,
+                    response_data: data
+                });
+            } catch (error) {
+                res.json({
+                    status: 'error',
+                    iplan_connectivity: 'failed',
+                    error: error.message,
+                    url_tested: `${BASE_URL}/Xplan/MapServer?f=json`
+                });
+            }
         });
 
         // MCP endpoint
