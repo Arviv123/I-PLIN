@@ -9,9 +9,18 @@ import cors from 'cors';
 // Base URL for Iplan services - MAVAT API
 const BASE_URL = "https://mavat.iplan.gov.il/rest";
 
+// Base44 Configuration
+const YOUR_APP_ID = process.env.BASE44_APP_ID || 'YOUR_APP_ID_HERE';
+const YOUR_BASE44_API_KEY = process.env.BASE44_API_KEY || 'YOUR_API_KEY_HERE';
+const BASE44_API_URL = 'https://www.base44.com/api/v1/app';
+
+// Track processed conversations
+const processedConversationIds = new Set();
+
 class IplanMCPServer {
     server;
     app;
+    pollingActive = false;
 
     constructor() {
         this.server = new Server({
@@ -157,6 +166,40 @@ class IplanMCPServer {
                 console.error(`Error executing tool '${name}':`, error);
                 res.status(500).json({ error: error.message });
             }
+        });
+
+        // 3. Configure Base44 credentials (for setup)
+        this.app.post('/api/configure', (req, res) => {
+            const { app_id, api_key } = req.body;
+            
+            if (!app_id || !api_key) {
+                return res.status(400).json({ 
+                    error: 'app_id and api_key are required',
+                    example: {
+                        app_id: 'your_base44_app_id',
+                        api_key: 'your_base44_api_key'
+                    }
+                });
+            }
+
+            // Update environment variables (for current session)
+            process.env.BASE44_APP_ID = app_id;
+            process.env.BASE44_API_KEY = api_key;
+            
+            console.log(`Base44 credentials updated: App ID = ${app_id}`);
+            
+            // Start polling if not already running
+            if (!this.pollingActive) {
+                console.log('Starting Base44 polling with new credentials...');
+                this.startPolling();
+                this.pollingActive = true;
+            }
+
+            res.json({
+                message: 'Base44 credentials configured successfully',
+                polling_status: 'active',
+                app_id: app_id
+            });
         });
 
         // MCP endpoint - SSE Transport
@@ -417,6 +460,148 @@ class IplanMCPServer {
         };
     }
 
+    // Base44 Integration Functions
+    async checkForNewMessages() {
+        try {
+            console.log("Checking for new conversations...");
+            const response = await fetch(
+                `${BASE44_API_URL}/${YOUR_APP_ID}/entities/ChatConversation/records?_sort=-updated_date&_limit=5`,
+                { 
+                    headers: { 
+                        'Authorization': `Bearer ${YOUR_BASE44_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    } 
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(`Base44 API error: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const conversations = data.records || [];
+
+            for (const conv of conversations) {
+                if (!conv.messages || conv.messages.length === 0) continue;
+
+                const lastMessage = conv.messages[conv.messages.length - 1];
+                
+                // Check if last message is from user and not processed yet
+                if (lastMessage.role === 'user' && !processedConversationIds.has(conv.id)) {
+                    console.log(`New message found in conversation ${conv.id}: "${lastMessage.content}"`);
+                    processedConversationIds.add(conv.id);
+                    await this.processAndRespond(conv);
+                }
+            }
+        } catch (error) {
+            console.error("Error checking for messages:", error.message);
+        }
+    }
+
+    async processAndRespond(conversation) {
+        const userQuery = conversation.messages.find(m => m.role === 'user').content;
+        console.log(`Processing query: "${userQuery}"`);
+
+        try {
+            // Simple AI logic to choose tool based on keywords
+            let toolToCall = 'search_plans'; // default
+            let toolArgs = {};
+
+            if (userQuery.includes('מספר') || userQuery.includes('תכנית')) {
+                toolToCall = 'get_plan_details';
+                // Extract plan number if possible
+                const planMatch = userQuery.match(/\d+/);
+                if (planMatch) {
+                    toolArgs = { planNumber: planMatch[0] };
+                }
+            } else if (userQuery.includes('מיקום') || userQuery.includes('קואורדינט')) {
+                toolToCall = 'search_by_location';
+                toolArgs = { x: 35.2137, y: 31.7683, radius: 1000 }; // Jerusalem default
+            } else {
+                // Extract search terms
+                const districts = ['תל אביב', 'ירושלים', 'חיפה', 'צפון', 'מרכז', 'דרום'];
+                const foundDistrict = districts.find(d => userQuery.includes(d));
+                
+                toolArgs = {
+                    searchTerm: userQuery.substring(0, 50), // First 50 chars
+                    district: foundDistrict || undefined
+                };
+            }
+
+            console.log(`AI decided to use tool: ${toolToCall} with args:`, toolArgs);
+
+            // Call the appropriate tool function
+            let result;
+            switch (toolToCall) {
+                case 'search_plans':
+                    result = await this.searchPlans(toolArgs);
+                    break;
+                case 'get_plan_details':
+                    result = await this.getPlanDetails(toolArgs.planNumber);
+                    break;
+                case 'search_by_location':
+                    result = await this.searchByLocation(toolArgs.x, toolArgs.y, toolArgs.radius);
+                    break;
+                default:
+                    result = { content: [{ type: 'text', text: 'כלי לא זמין' }] };
+            }
+
+            // Send response back to base44
+            await this.sendResponseToBase44(conversation.id, toolToCall, result);
+
+        } catch (error) {
+            console.error(`Error processing conversation ${conversation.id}:`, error);
+            await this.sendResponseToBase44(conversation.id, 'error', {
+                content: [{ type: 'text', text: `שגיאה: ${error.message}` }]
+            });
+        }
+    }
+
+    async sendResponseToBase44(conversationId, toolName, result) {
+        try {
+            const payload = {
+                record: {
+                    conversation_id: conversationId,
+                    tool_name: toolName,
+                    status: "success",
+                    response_data: JSON.stringify(result)
+                }
+            };
+
+            const response = await fetch(
+                `${BASE44_API_URL}/${YOUR_APP_ID}/entities/ToolResponse/records`,
+                {
+                    method: 'POST',
+                    headers: {
+                        'Authorization': `Bearer ${YOUR_BASE44_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(payload)
+                }
+            );
+
+            if (!response.ok) {
+                throw new Error(`Base44 response error: ${response.status}`);
+            }
+
+            console.log(`Successfully sent response for conversation ${conversationId}`);
+            
+            // Allow new messages in same conversation after 1 minute
+            setTimeout(() => processedConversationIds.delete(conversationId), 60000);
+
+        } catch (error) {
+            console.error("Error sending response to base44:", error.message);
+        }
+    }
+
+    startPolling() {
+        console.log("Starting Base44 polling system...");
+        // Poll every 5 seconds
+        setInterval(() => {
+            this.checkForNewMessages();
+        }, 5000);
+    }
+
     async run() {
         const PORT = process.env.PORT || 10000;
         const HOST = process.env.HOST || '0.0.0.0';
@@ -425,6 +610,16 @@ class IplanMCPServer {
             console.log(`Iplan MCP Server running on http://${HOST}:${PORT}`);
             console.log(`Health check: http://${HOST}:${PORT}/`);
             console.log(`MCP endpoint: http://${HOST}:${PORT}/sse`);
+            console.log(`REST API: http://${HOST}:${PORT}/api/tools`);
+            
+            // Start Base44 polling if credentials are provided
+            if (YOUR_APP_ID !== 'YOUR_APP_ID_HERE' && YOUR_BASE44_API_KEY !== 'YOUR_API_KEY_HERE') {
+                console.log(`Starting Base44 integration with App ID: ${YOUR_APP_ID}`);
+                this.startPolling();
+            } else {
+                console.log('Base44 credentials not configured - polling disabled');
+                console.log('Set BASE44_APP_ID and BASE44_API_KEY environment variables to enable');
+            }
         });
     }
 }
