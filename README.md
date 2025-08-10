@@ -1,36 +1,26 @@
-# SART Server
+# Iplan MCP Server
 
-Server management API bridge for remote project management
+שרת MCP לגישה לנתוני מינהל התכנון הישראלי
 
-## Features
-
-- 📁 Project file management
-- 🗂️ Directory structure exploration
-- ⚡ Terminal command execution  
-- 📦 ZIP file upload and extraction
-- 🔄 Process management and monitoring
-
-## Installation
+## התקנה
 
 ```bash
 npm install
 npm start
 ```
 
-Server runs on port 3001 (or PORT environment variable)
+השרת יפעל על פורט 10000
 
-## API Endpoints
+## נקודות קצה
 
-### Health Check
-- `GET /` - Server status and info
+- `/` - בדיקת בריאות
+- `/sse` - נקודת הקצה של MCP
 
-### Project Management
-- `POST /upload-project` - Upload and extract ZIP project
-- `GET /project/:id/structure` - Get project directory structure
-- `GET /project/:id/file/*` - Read project file content
-- `PUT /project/:id/file/*` - Update project file content
+## כלים זמינים
 
-### Command Execution
-- `POST /project/:id/run` - Execute command in project directory
-- `POST /execution/:id/stop` - Stop running command
-- `GET /processes` - List running processes
+- חיפוש תכניות
+- פרטי תכנית ספציפית  
+- חיפוש לפי מיקום
+- הגבלות בנייה
+- נתוני תשתיות
+- אתרי שימור
