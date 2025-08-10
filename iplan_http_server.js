@@ -25,14 +25,11 @@ const base44Config = {
     apiKey: process.env.BASE44_API_KEY || null
 };
 
-// Base44 API URLs - Testing different approaches
-const BASE44_API_BASE = `https://www.base44.com/api/v1/app/${process.env.BASE44_APP_ID || base44Config.appId}`;
+// Base44 API URLs - Using the correct mcpBridge approach
+const BASE44_APP_URL = process.env.BASE44_APP_URL || 'https://[your-app-url]'; // You need to provide your actual app URL
 const BASE44_API_ENDPOINTS = {
-    // Try simple approach first
-    conversationsSimple: `${BASE44_API_BASE}/entities/ChatConversation/records`,
-    // Original with filters
-    conversations: `${BASE44_API_BASE}/entities/ChatConversation/records?filter_by=%7B%22status%22%3A%20%22active%22%7D&sort_by=-created_date&limit=1`,
-    updateConversation: (conversationId) => `${BASE44_API_BASE}/entities/ChatConversation/records/${conversationId}`
+    getConversations: `${BASE44_APP_URL}/functions/mcpBridge?action=getConversations`,
+    sendResponse: `${BASE44_APP_URL}/functions/mcpBridge?action=sendResponse`
 };
 
 // Track processed conversations
@@ -418,6 +415,81 @@ class IplanMCPServer {
                     'Server is using REAL API calls to Israel Planning Administration' :
                     'Server is using DEMO data for testing purposes'
             });
+        });
+
+        // 8. Base44 Webhook Endpoint - Simple approach
+        this.app.post('/api/base44/webhook', async (req, res) => {
+            try {
+                console.log('📨 Received Base44 Webhook:', JSON.stringify(req.body, null, 2));
+                
+                const { conversation_id, user_query, tool_request, metadata } = req.body;
+                
+                if (!conversation_id || !user_query) {
+                    return res.status(400).json({
+                        error: 'Missing required fields: conversation_id, user_query'
+                    });
+                }
+
+                // Process the query using our planning tools
+                const response = await this.processBase44Query(conversation_id, user_query, tool_request);
+                
+                res.json({
+                    success: true,
+                    conversation_id,
+                    response,
+                    timestamp: new Date().toISOString()
+                });
+                
+            } catch (error) {
+                console.error('❌ Base44 webhook error:', error);
+                res.status(500).json({
+                    error: 'Internal server error',
+                    message: error.message
+                });
+            }
+        });
+
+        // 9. Base44 Query Handler - Direct query processing
+        this.app.post('/api/base44/query', async (req, res) => {
+            try {
+                const { query, parameters = {} } = req.body;
+                
+                if (!query) {
+                    return res.status(400).json({
+                        error: 'Missing required field: query'
+                    });
+                }
+
+                console.log(`🔍 Processing Base44 query: ${query}`);
+                
+                // Determine which tool to use based on query content
+                let result;
+                if (query.includes('מיקום') || query.includes('כתובת') || /\d+\.\d+/.test(query)) {
+                    // Location-based search
+                    const coords = this.extractCoordinates(query);
+                    result = await this.searchByLocation(coords.x, coords.y, parameters.radius || 1000);
+                } else {
+                    // General search
+                    result = await this.searchPlans({
+                        searchTerm: query,
+                        ...parameters
+                    });
+                }
+                
+                res.json({
+                    success: true,
+                    query,
+                    result: result.content[0].text,
+                    timestamp: new Date().toISOString()
+                });
+                
+            } catch (error) {
+                console.error('❌ Base44 query error:', error);
+                res.status(500).json({
+                    error: 'Query processing failed',
+                    message: error.message
+                });
+            }
         });
 
         // MCP endpoint - SSE Transport
@@ -879,64 +951,33 @@ class IplanMCPServer {
         };
     }
 
-    // Base44 Integration Functions - Real API implementation
+    // Base44 Integration Functions - Using mcpBridge
     async checkForNewMessages() {
-        console.log("Checking for new conversations via Base44 API...");
+        console.log("🔍 Checking for new conversations via mcpBridge...");
         
-        if (!base44Config.appId || !base44Config.apiKey) {
-            console.log("Base44 credentials not configured");
+        if (!BASE44_APP_URL || BASE44_APP_URL.includes('[your-app-url]')) {
+            console.log("❌ Base44 App URL not configured. Please set BASE44_APP_URL environment variable");
             return;
         }
         
         try {
-            // Try the simple endpoint first
-            let response;
-            let apiUrl;
+            console.log(`🔗 Calling mcpBridge: ${BASE44_API_ENDPOINTS.getConversations}`);
             
-            try {
-                apiUrl = BASE44_API_ENDPOINTS.conversationsSimple;
-                console.log(`🔗 Trying simple Base44 API: ${apiUrl}`);
-                console.log(`🔑 Using API Key: ${base44Config.apiKey?.substring(0, 8)}...`);
-                
-                response = await fetch(apiUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${base44Config.apiKey}`,
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'I-PLIN-Server/1.0'
-                    },
-                    timeout: 10000
-                });
-                
-                console.log(`📞 Simple API Response Status: ${response.status} ${response.statusText}`);
-                
-                if (!response.ok) {
-                    throw new Error(`Simple API failed: ${response.status}`);
-                }
-            } catch (simpleError) {
-                console.log(`⚠️  Simple API failed (${simpleError.message}), trying filtered API...`);
-                
-                apiUrl = BASE44_API_ENDPOINTS.conversations;
-                console.log(`🔗 Trying filtered Base44 API: ${apiUrl}`);
-                
-                response = await fetch(apiUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Authorization': `Bearer ${base44Config.apiKey}`,
-                        'Content-Type': 'application/json',
-                        'User-Agent': 'I-PLIN-Server/1.0'
-                    },
-                    timeout: 10000
-                });
-                
-                console.log(`📞 Filtered API Response Status: ${response.status} ${response.statusText}`);
-                
-                if (!response.ok) {
-                    // Get the actual response body for debugging
-                    const errorText = await response.text();
-                    console.log(`❌ Error response body: ${errorText.substring(0, 200)}`);
-                    throw new Error(`Base44 API error: ${response.status} ${response.statusText}`);
-                }
+            const response = await fetch(BASE44_API_ENDPOINTS.getConversations, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'I-PLIN-Server/2.0'
+                },
+                timeout: 10000
+            });
+            
+            console.log(`📞 mcpBridge Response Status: ${response.status} ${response.statusText}`);
+            
+            if (!response.ok) {
+                const errorText = await response.text();
+                console.log(`❌ mcpBridge Error: ${errorText.substring(0, 200)}`);
+                throw new Error(`mcpBridge API error: ${response.status} ${response.statusText}`);
             }
 
             const data = await response.json();
@@ -1068,39 +1109,42 @@ class IplanMCPServer {
 
     async sendResponseToBase44(conversationId, toolName, result) {
         try {
-            console.log(`📤 Sending response for conversation ${conversationId}`);
+            console.log(`📤 Sending response to mcpBridge for conversation ${conversationId}`);
             console.log(`Tool used: ${toolName}`);
             
-            // First, add our response message to the conversation
-            const responseMessage = {
-                id: `msg_${Date.now()}`,
-                role: "assistant",
-                content: result.content[0].text,
-                timestamp: new Date().toISOString(),
-                tool_used: toolName
+            // Prepare response data according to mcpBridge specification
+            const responseData = {
+                conversation_id: conversationId,
+                tool_name: toolName,
+                status: "success",
+                response_data: JSON.stringify(result.content[0].text) // Send as string as specified
             };
             
             console.log(`Response preview: ${result.content[0].text.substring(0, 100)}...`);
+            console.log(`🔗 Calling mcpBridge sendResponse: ${BASE44_API_ENDPOINTS.sendResponse}`);
             
-            // Update conversation status to archived as per Base44 specification
-            const updateResponse = await fetch(BASE44_API_ENDPOINTS.updateConversation(conversationId), {
-                method: 'PATCH',
+            // Send response using mcpBridge
+            const sendResponse = await fetch(BASE44_API_ENDPOINTS.sendResponse, {
+                method: 'POST',
                 headers: {
-                    'Authorization': `Bearer ${base44Config.apiKey}`,
-                    'Content-Type': 'application/json'
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'I-PLIN-Server/2.0'
                 },
-                body: JSON.stringify({
-                    status: "archived"
-                }),
+                body: JSON.stringify(responseData),
                 timeout: 10000
             });
 
-            if (!updateResponse.ok) {
-                throw new Error(`Failed to archive conversation: ${updateResponse.status} ${updateResponse.statusText}`);
+            console.log(`📞 mcpBridge sendResponse Status: ${sendResponse.status} ${sendResponse.statusText}`);
+
+            if (!sendResponse.ok) {
+                const errorText = await sendResponse.text();
+                console.log(`❌ mcpBridge sendResponse Error: ${errorText.substring(0, 200)}`);
+                throw new Error(`Failed to send response via mcpBridge: ${sendResponse.status} ${sendResponse.statusText}`);
             }
 
-            console.log(`✅ Successfully processed and archived conversation ${conversationId}`);
-            console.log(`🎯 Tool: ${toolName} | Status: archived`);
+            const sendResult = await sendResponse.json();
+            console.log(`✅ Successfully sent response via mcpBridge for conversation ${conversationId}`);
+            console.log(`🎯 Tool: ${toolName} | mcpBridge Result:`, sendResult);
             
             // Remove from processed set after 5 minutes to allow reprocessing if needed
             setTimeout(() => {
@@ -1109,19 +1153,117 @@ class IplanMCPServer {
             }, 300000);
 
         } catch (error) {
-            console.error(`❌ Error sending response to Base44 for conversation ${conversationId}:`, error.message);
+            console.error(`❌ Error sending response via mcpBridge for conversation ${conversationId}:`, error.message);
             
             // Remove from processed set on error so it can be retried
             setTimeout(() => processedConversationIds.delete(conversationId), 30000);
         }
     }
 
+    // New Webhook-based approach - Simple and reliable
+    async processBase44Query(conversationId, userQuery, toolRequest) {
+        console.log(`🎯 Processing query for conversation ${conversationId}: "${userQuery}"`);
+        
+        try {
+            let result;
+            
+            // If specific tool is requested, use it
+            if (toolRequest && toolRequest.tool_name) {
+                switch (toolRequest.tool_name) {
+                    case 'search_plans':
+                        result = await this.searchPlans(toolRequest.parameters || { searchTerm: userQuery });
+                        break;
+                    case 'get_plan_details':
+                        result = await this.getPlanDetails(toolRequest.parameters?.planNumber);
+                        break;
+                    case 'search_by_location':
+                        result = await this.searchByLocation(
+                            toolRequest.parameters?.x,
+                            toolRequest.parameters?.y,
+                            toolRequest.parameters?.radius
+                        );
+                        break;
+                    default:
+                        result = await this.searchPlans({ searchTerm: userQuery });
+                }
+            } else {
+                // Auto-detect best tool based on query content
+                if (userQuery.includes('מיקום') || userQuery.includes('כתובת') || /\d+\.\d+/.test(userQuery)) {
+                    const coords = this.extractCoordinates(userQuery);
+                    if (coords.x && coords.y) {
+                        result = await this.searchByLocation(coords.x, coords.y, 1000);
+                    } else {
+                        result = await this.searchPlans({ searchTerm: userQuery });
+                    }
+                } else if (/\d{4,6}/.test(userQuery)) {
+                    // Looks like a plan number
+                    const planNumber = userQuery.match(/\d{4,6}/)[0];
+                    result = await this.getPlanDetails(planNumber);
+                } else {
+                    // General search
+                    result = await this.searchPlans({ searchTerm: userQuery });
+                }
+            }
+            
+            return {
+                success: true,
+                tool_used: result.tool_used || 'auto_detected',
+                data: result.content[0].text,
+                conversation_id: conversationId
+            };
+            
+        } catch (error) {
+            console.error(`❌ Error processing query for conversation ${conversationId}:`, error);
+            return {
+                success: false,
+                error: error.message,
+                conversation_id: conversationId
+            };
+        }
+    }
+
+    extractCoordinates(query) {
+        // Try to extract coordinates from query
+        const coordPattern = /(\d+\.\d+)[,\s]+(\d+\.\d+)/;
+        const match = query.match(coordPattern);
+        
+        if (match) {
+            return {
+                x: parseFloat(match[1]),
+                y: parseFloat(match[2])
+            };
+        }
+        
+        // Default Tel Aviv coordinates if no coordinates found
+        return {
+            x: 34.7818,
+            y: 32.0853
+        };
+    }
+
     startPolling() {
-        console.log("Starting Base44 polling system...");
-        // Poll every 5 seconds
-        setInterval(() => {
-            this.checkForNewMessages();
-        }, 5000);
+        if (BASE44_APP_URL && !BASE44_APP_URL.includes('[your-app-url]')) {
+            console.log("📡 Base44 mcpBridge Integration Active!");
+            console.log("✅ Configured endpoints:");
+            console.log(`   - GET  ${BASE44_API_ENDPOINTS.getConversations}`);
+            console.log(`   - POST ${BASE44_API_ENDPOINTS.sendResponse}`);
+            console.log("");
+            console.log("🚀 Ready to poll for conversations via mcpBridge!");
+            
+            // Start actual polling now that we have the right endpoints
+            setInterval(() => {
+                this.checkForNewMessages();
+            }, 30000); // Check every 30 seconds
+        } else {
+            console.log("⚠️  Base44 integration not configured");
+            console.log("📋 To enable Base44 integration:");
+            console.log("   1. Set BASE44_APP_URL environment variable to your Base44 app URL");
+            console.log("   2. Example: BASE44_APP_URL=https://your-base44-app.com");
+            console.log("");
+            console.log("💡 Alternative: Use webhook endpoints:");
+            console.log("   - POST /api/base44/webhook (for full conversation data)");
+            console.log("   - POST /api/base44/query (for direct queries)");
+        }
     }
 
     async run() {
@@ -1134,14 +1276,10 @@ class IplanMCPServer {
             console.log(`MCP endpoint: http://${HOST}:${PORT}/sse`);
             console.log(`REST API: http://${HOST}:${PORT}/api/tools`);
             
-            // Start Base44 polling if credentials are provided
-            if (base44Config.appId && base44Config.apiKey) {
-                console.log(`Starting Base44 integration with App ID: ${base44Config.appId}`);
-                this.startPolling();
-            } else {
-                console.log('Base44 credentials not configured - polling disabled');
-                console.log('Set BASE44_APP_ID and BASE44_API_KEY environment variables to enable');
-            }
+            // Start Base44 integration - now using mcpBridge approach
+            console.log('');
+            console.log('🔗 Base44 Integration Status:');
+            this.startPolling();
         });
     }
 }

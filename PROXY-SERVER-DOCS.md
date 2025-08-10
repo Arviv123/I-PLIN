@@ -12,6 +12,12 @@ https://i-plin.onrender.com
 - **DEMO MODE** - נתוני דוגמה לבדיקות
 - **REAL MODE** - קריאות אמיתיות למינהל התכנון עם fallback
 
+### 🌉 אינטגרציה עם Base44 - mcpBridge
+השרת משתמש בפונקציית **mcpBridge** של Base44 לחיבור יציב ומאובטח:
+- **נקודת קצה אחידה** - פונקציה אחת שמטפלת בכל המורכבות הפנימית
+- **אימות אוטומטי** - אין צורך בטיפול בפרטי אימות
+- **יציבות** - לא תלוי בשינויים פנימיים במבנה Base44
+
 ### 🌐 נקודות קצה חדשות
 
 #### 1. חיפוש Proxy ישיר (עבור Base44)
@@ -111,30 +117,53 @@ GET /api/current-mode
 
 ## איך להשתמש עם Base44
 
-### שלב 1: בדיקת זמינות השרת
-```javascript
-const healthCheck = await fetch('https://i-plin.onrender.com/');
-const status = await healthCheck.json();
-console.log('Server status:', status);
+### אפשרות 1: אינטגרציה עם mcpBridge (מומלץ)
+
+**שלב 1: הגדרת משתנה סביבה**
+```bash
+# הגדר את כתובת האפליקציה שלך
+export BASE44_APP_URL=https://your-base44-app.com
 ```
 
-### שלב 2: בדיקת חיבור למינהל התכנון
-```javascript
-const connectionCheck = await fetch('https://i-plin.onrender.com/api/check-iplan-connection');
-const iplanStatus = await connectionCheck.json();
-console.log('Iplan status:', iplanStatus.overall_status);
-```
+**שלב 2: השרת יתחבר אוטומטית**
+השרת יבצע polling אוטומטי לפונקציית mcpBridge:
+- **GET** `https://your-base44-app.com/functions/mcpBridge?action=getConversations`
+- **POST** `https://your-base44-app.com/functions/mcpBridge?action=sendResponse`
 
-### שלב 3: הפעלת מצב אמיתי (אם נדרש)
+### אפשרות 2: שימוש ב-Webhook (גיבוי)
+
+**שיחה ישירה עם השרת:**
 ```javascript
-const toggleReal = await fetch('https://i-plin.onrender.com/api/toggle-real-mode', {
+// שליחת שאלה ישירה
+const queryResult = await fetch('https://i-plin.onrender.com/api/base44/query', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ enabled: true })
+  body: JSON.stringify({
+    query: "חפש לי תכניות מגורים בתל אביב",
+    parameters: { district: "תל אביב" }
+  })
 });
 ```
 
-### שלב 4: ביצוע חיפוש
+**שליחת webhook מלא:**
+```javascript
+const webhookResult = await fetch('https://i-plin.onrender.com/api/base44/webhook', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    conversation_id: "conv_123",
+    user_query: "חפש תכניות בירושלים",
+    tool_request: {
+      tool_name: "search_plans",
+      parameters: { searchTerm: "ירושלים" }
+    }
+  })
+});
+```
+
+### אפשרות 3: REST API רגיל (לבדיקות)
+
+**ביצוע חיפוש רגיל:**
 ```javascript
 const searchResult = await fetch('https://i-plin.onrender.com/api/search-plans', {
   method: 'POST',
@@ -251,9 +280,12 @@ district_name LIKE '%תל אביב%' AND pl_landuse_string LIKE '%מגורים%'
 # הפעלת מצב אמיתי בעת הרצת השרת
 USE_REAL_API=true node iplan_http_server.js
 
-# הגדרת Base44 credentials
-BASE44_APP_ID=your_app_id_here
-BASE44_API_KEY=your_api_key_here
+# הגדרת Base44 mcpBridge (מומלץ)
+BASE44_APP_URL=https://your-base44-app.com
+
+# הגדרות אלטרנטיביות (לא נחוצות עם mcpBridge)
+# BASE44_APP_ID=your_app_id_here  
+# BASE44_API_KEY=your_api_key_here
 ```
 
 ## לוגים ודיבוג
@@ -273,7 +305,15 @@ API mode switched to: REAL DATA
 ✅ **REST API מלא**  
 ✅ **Proxy למינהל התכנון**  
 ✅ **מצב Demo/Real**  
-✅ **אינטגרציה עם Base44**  
+✅ **אינטגרציה עם Base44 mcpBridge**  
+✅ **Webhook endpoints לגיבוי**  
 ⚠️ **שירותי מינהל התכנון**: לא זמינים כרגע (נפוץ)
 
-השרת מוכן לשימוש עם Base44 AI ויספק תגובות מהירות עם fallback אוטומטי!
+## הוראות הפעלה סופיות עבור Base44
+
+**השלב הבא שלך:**
+1. הגדר את `BASE44_APP_URL` למבנה הנכון של האפליקציה שלך
+2. השרת יתחיל אוטומטית לבצע polling לפונקציית mcpBridge שלך
+3. תוכל לעקוב אחר הלוגים כדי לוודא שהחיבור פועל
+
+השרת מוכן ומחכה רק לכתובת הנכונה של האפליקציה שלך!
