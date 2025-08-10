@@ -47,7 +47,6 @@ class IplanMCPServer {
 
         // Test Iplan connectivity
         this.app.get('/test-iplan', async (req, res) => {
-            // Always respond successfully to avoid crashing
             res.json({
                 status: 'testing',
                 message: 'Testing multiple Iplan endpoints...',
@@ -61,6 +60,103 @@ class IplanMCPServer {
                 ],
                 note: 'This is a safe test that won\'t crash the server'
             });
+        });
+
+        // ====================================================================
+        // ===            REST API endpoints for external systems         ===
+        // ====================================================================
+
+        // 1. Get available tools
+        this.app.get('/api/tools', (req, res) => {
+            console.log("Received request for /api/tools");
+            res.json({ 
+                tools: [
+                    {
+                        name: 'search_plans',
+                        description: 'חיפוש תכניות במינהל התכנון הישראלי עם פילטרים מתקדמים',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                searchTerm: {
+                                    type: 'string',
+                                    description: 'שם או מספר תכנית לחיפוש'
+                                },
+                                district: {
+                                    type: 'string',
+                                    description: 'מחוז (תל אביב, ירושלים, חיפה, מחוז הצפון, מחוז המרכז, מחוז הדרום)'
+                                }
+                            }
+                        }
+                    },
+                    {
+                        name: 'get_plan_details',
+                        description: 'קבלת פרטי תכנית ספציפית לפי מספר תכנית',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                planNumber: {
+                                    type: 'string',
+                                    description: 'מספר התכנית'
+                                }
+                            },
+                            required: ['planNumber']
+                        }
+                    },
+                    {
+                        name: 'search_by_location',
+                        description: 'חיפוש תכניות לפי מיקום גיאוגרפי',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                x: {
+                                    type: 'number',
+                                    description: 'קואורדינטת X (longitude)'
+                                },
+                                y: {
+                                    type: 'number', 
+                                    description: 'קואורדינטת Y (latitude)'
+                                },
+                                radius: {
+                                    type: 'number',
+                                    description: 'רדיוס חיפוש במטרים'
+                                }
+                            },
+                            required: ['x', 'y']
+                        }
+                    }
+                ]
+            });
+        });
+
+        // 2. Execute tool
+        this.app.post('/api/call', async (req, res) => {
+            const { name, arguments: args } = req.body;
+            console.log(`Received API call for tool: ${name} with args:`, args);
+
+            if (!name) {
+                return res.status(400).json({ error: 'Tool name is required' });
+            }
+
+            try {
+                let result;
+                switch (name) {
+                    case 'search_plans':
+                        result = await this.searchPlans(args);
+                        break;
+                    case 'get_plan_details':
+                        result = await this.getPlanDetails(args?.planNumber);
+                        break;
+                    case 'search_by_location':
+                        result = await this.searchByLocation(args?.x, args?.y, args?.radius);
+                        break;
+                    default:
+                        throw new Error(`Tool '${name}' not found`);
+                }
+                res.json(result);
+            } catch (error) {
+                console.error(`Error executing tool '${name}':`, error);
+                res.status(500).json({ error: error.message });
+            }
         });
 
         // MCP endpoint - SSE Transport
@@ -283,7 +379,43 @@ class IplanMCPServer {
         };
     }
 
-    // שאר הפונקציות נשארות זהות...
+    // Iplan API functions
+    async searchPlans(params) {
+        console.log('Executing searchPlans with:', params);
+        // For now, return a mock response
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: `חיפוש תכניות עבור: ${JSON.stringify(params)}\n\nהשירות זמין אך מחובר לגרסת בדיקה.`
+                }
+            ]
+        };
+    }
+
+    async getPlanDetails(planNumber) {
+        console.log('Executing getPlanDetails for plan:', planNumber);
+        return {
+            content: [
+                {
+                    type: 'text', 
+                    text: `פרטי תכנית מספר: ${planNumber}\n\nהשירות זמין אך מחובר לגרסת בדיקה.`
+                }
+            ]
+        };
+    }
+
+    async searchByLocation(x, y, radius) {
+        console.log('Executing searchByLocation with:', { x, y, radius });
+        return {
+            content: [
+                {
+                    type: 'text',
+                    text: `חיפוש לפי מיקום: ${x}, ${y} ברדיוס ${radius || 1000} מטר\n\nהשירות זמין אך מחובר לגרסת בדיקה.`
+                }
+            ]
+        };
+    }
 
     async run() {
         const PORT = process.env.PORT || 10000;
