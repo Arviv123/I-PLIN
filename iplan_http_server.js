@@ -2,7 +2,6 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js';
-import { createClient } from '@base44/sdk-js';
 import fetch from 'node-fetch';
 import express from 'express';
 import cors from 'cors';
@@ -24,6 +23,12 @@ const USE_REAL_API = process.env.USE_REAL_API === 'true' || false;
 const base44Config = {
     appId: process.env.BASE44_APP_ID || null,
     apiKey: process.env.BASE44_API_KEY || null
+};
+
+// Base44 API URLs - Please provide the correct endpoints
+const BASE44_API_ENDPOINTS = {
+    conversations: `https://[BASE44_DOMAIN]/api/conversations`, // Please replace with correct URL
+    responses: `https://[BASE44_DOMAIN]/api/responses`         // Please replace with correct URL
 };
 
 // Track processed conversations
@@ -870,51 +875,35 @@ class IplanMCPServer {
         };
     }
 
-    // Base44 Integration Functions using official SDK
+    // Base44 Integration Functions - Simplified approach
     async checkForNewMessages() {
-        console.log("Checking for new conversations using the official SDK...");
+        console.log("Checking for new conversations...");
+        
+        if (!base44Config.appId || !base44Config.apiKey) {
+            console.log("Base44 credentials not configured");
+            return;
+        }
         
         try {
-            // Create Base44 client with SDK
-            const base44 = createClient({
-                appId: base44Config.appId,
-                apiKey: base44Config.apiKey,
-            });
-
-            // Fetch conversations using the correct SDK method
-            const { data: conversations, error } = await base44
-                .from('ChatConversation')
-                .select('*')
-                .eq('status', 'active')
-                .order('created_date', { ascending: false })
-                .limit(10);
-
-            if (error) {
-                console.error('Error fetching conversations from Base44:', error.message);
-                return;
-            }
-
-            if (conversations && conversations.length > 0) {
-                console.log(`✅ Found ${conversations.length} new conversations to process.`);
-                
-                for (const conv of conversations) {
-                    if (!conv.messages || conv.messages.length === 0) continue;
-
-                    const lastMessage = conv.messages[conv.messages.length - 1];
-                    
-                    // Check if last message is from user and not processed yet
-                    if (lastMessage.role === 'user' && !processedConversationIds.has(conv.id)) {
-                        console.log(`New message found in conversation ${conv.id}: "${lastMessage.content}"`);
-                        processedConversationIds.add(conv.id);
-                        await this.processAndRespond(conv);
-                    }
+            // For now, we'll use a mock approach until you provide the correct API endpoints
+            console.log("Base44 polling active - waiting for correct API endpoints");
+            console.log(`App ID: ${base44Config.appId}`);
+            console.log("Please provide the correct Base44 API endpoints to complete integration");
+            
+            // TODO: Replace with actual API call when correct endpoints are provided
+            // Example of what the call should look like:
+            /*
+            const response = await fetch('CORRECT_BASE44_API_URL', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${base44Config.apiKey}`,
+                    'Content-Type': 'application/json'
                 }
-            } else {
-                console.log("No new conversations found.");
-            }
+            });
+            */
             
         } catch (error) {
-            console.error("A critical error occurred during SDK polling:", error.message);
+            console.error("Error in Base44 integration:", error.message);
         }
     }
 
@@ -979,34 +968,17 @@ class IplanMCPServer {
 
     async sendResponseToBase44(conversationId, toolName, result) {
         try {
-            // Create Base44 client with SDK
-            const base44 = createClient({
-                appId: base44Config.appId,
-                apiKey: base44Config.apiKey,
-            });
-
-            // Send response using SDK
-            const { data, error } = await base44
-                .from('ToolResponse')
-                .insert({
-                    conversation_id: conversationId,
-                    tool_name: toolName,
-                    status: "success",
-                    response_data: JSON.stringify(result),
-                    created_at: new Date().toISOString()
-                });
-
-            if (error) {
-                throw new Error(`Base44 SDK error: ${error.message}`);
-            }
-
-            console.log(`✅ Successfully sent response for conversation ${conversationId} using SDK`);
+            console.log(`Preparing to send response for conversation ${conversationId}`);
+            console.log(`Tool: ${toolName}, Result: ${JSON.stringify(result).substring(0, 100)}...`);
+            
+            // TODO: Implement actual API call when correct endpoints are provided
+            console.log("Response ready to send - waiting for correct Base44 API endpoints");
             
             // Allow new messages in same conversation after 1 minute
             setTimeout(() => processedConversationIds.delete(conversationId), 60000);
 
         } catch (error) {
-            console.error("Error sending response to base44 via SDK:", error.message);
+            console.error("Error in Base44 response handler:", error.message);
         }
     }
 
