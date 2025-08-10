@@ -2,6 +2,7 @@
 import { Server } from '@modelcontextprotocol/sdk/server/index.js';
 import { SSEServerTransport } from '@modelcontextprotocol/sdk/server/sse.js';
 import { CallToolRequestSchema, ErrorCode, ListToolsRequestSchema, McpError } from '@modelcontextprotocol/sdk/types.js';
+import { createClient } from '@base44/sdk-js';
 import fetch from 'node-fetch';
 import express from 'express';
 import cors from 'cors';
@@ -24,7 +25,6 @@ const base44Config = {
     appId: process.env.BASE44_APP_ID || null,
     apiKey: process.env.BASE44_API_KEY || null
 };
-const BASE44_API_URL = 'https://www.base44.com/api/v1/app';
 
 // Track processed conversations
 const processedConversationIds = new Set();
@@ -870,41 +870,51 @@ class IplanMCPServer {
         };
     }
 
-    // Base44 Integration Functions
+    // Base44 Integration Functions using official SDK
     async checkForNewMessages() {
+        console.log("Checking for new conversations using the official SDK...");
+        
         try {
-            console.log("Checking for new conversations...");
-            const response = await fetch(
-                `${BASE44_API_URL}/${base44Config.appId}/entities/ChatConversation/records?_sort=-updated_date&_limit=5`,
-                { 
-                    headers: { 
-                        'Authorization': `Bearer ${base44Config.apiKey}`,
-                        'Content-Type': 'application/json'
-                    } 
-                }
-            );
+            // Create Base44 client with SDK
+            const base44 = createClient({
+                appId: base44Config.appId,
+                apiKey: base44Config.apiKey,
+            });
 
-            if (!response.ok) {
-                throw new Error(`Base44 API error: ${response.status}`);
+            // Fetch conversations using the correct SDK method
+            const { data: conversations, error } = await base44
+                .from('ChatConversation')
+                .select('*')
+                .eq('status', 'active')
+                .order('created_date', { ascending: false })
+                .limit(10);
+
+            if (error) {
+                console.error('Error fetching conversations from Base44:', error.message);
+                return;
             }
 
-            const data = await response.json();
-            const conversations = data.records || [];
-
-            for (const conv of conversations) {
-                if (!conv.messages || conv.messages.length === 0) continue;
-
-                const lastMessage = conv.messages[conv.messages.length - 1];
+            if (conversations && conversations.length > 0) {
+                console.log(`✅ Found ${conversations.length} new conversations to process.`);
                 
-                // Check if last message is from user and not processed yet
-                if (lastMessage.role === 'user' && !processedConversationIds.has(conv.id)) {
-                    console.log(`New message found in conversation ${conv.id}: "${lastMessage.content}"`);
-                    processedConversationIds.add(conv.id);
-                    await this.processAndRespond(conv);
+                for (const conv of conversations) {
+                    if (!conv.messages || conv.messages.length === 0) continue;
+
+                    const lastMessage = conv.messages[conv.messages.length - 1];
+                    
+                    // Check if last message is from user and not processed yet
+                    if (lastMessage.role === 'user' && !processedConversationIds.has(conv.id)) {
+                        console.log(`New message found in conversation ${conv.id}: "${lastMessage.content}"`);
+                        processedConversationIds.add(conv.id);
+                        await this.processAndRespond(conv);
+                    }
                 }
+            } else {
+                console.log("No new conversations found.");
             }
+            
         } catch (error) {
-            console.error("Error checking for messages:", error.message);
+            console.error("A critical error occurred during SDK polling:", error.message);
         }
     }
 
@@ -969,38 +979,34 @@ class IplanMCPServer {
 
     async sendResponseToBase44(conversationId, toolName, result) {
         try {
-            const payload = {
-                record: {
+            // Create Base44 client with SDK
+            const base44 = createClient({
+                appId: base44Config.appId,
+                apiKey: base44Config.apiKey,
+            });
+
+            // Send response using SDK
+            const { data, error } = await base44
+                .from('ToolResponse')
+                .insert({
                     conversation_id: conversationId,
                     tool_name: toolName,
                     status: "success",
-                    response_data: JSON.stringify(result)
-                }
-            };
+                    response_data: JSON.stringify(result),
+                    created_at: new Date().toISOString()
+                });
 
-            const response = await fetch(
-                `${BASE44_API_URL}/${base44Config.appId}/entities/ToolResponse/records`,
-                {
-                    method: 'POST',
-                    headers: {
-                        'Authorization': `Bearer ${base44Config.apiKey}`,
-                        'Content-Type': 'application/json'
-                    },
-                    body: JSON.stringify(payload)
-                }
-            );
-
-            if (!response.ok) {
-                throw new Error(`Base44 response error: ${response.status}`);
+            if (error) {
+                throw new Error(`Base44 SDK error: ${error.message}`);
             }
 
-            console.log(`Successfully sent response for conversation ${conversationId}`);
+            console.log(`✅ Successfully sent response for conversation ${conversationId} using SDK`);
             
             // Allow new messages in same conversation after 1 minute
             setTimeout(() => processedConversationIds.delete(conversationId), 60000);
 
         } catch (error) {
-            console.error("Error sending response to base44:", error.message);
+            console.error("Error sending response to base44 via SDK:", error.message);
         }
     }
 
