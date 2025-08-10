@@ -25,10 +25,11 @@ const base44Config = {
     apiKey: process.env.BASE44_API_KEY || null
 };
 
-// Base44 API URLs - Please provide the correct endpoints
+// Base44 API URLs - Correct endpoints provided
+const BASE44_API_BASE = `https://www.base44.com/api/v1/app/${process.env.BASE44_APP_ID || base44Config.appId}`;
 const BASE44_API_ENDPOINTS = {
-    conversations: `https://[BASE44_DOMAIN]/api/conversations`, // Please replace with correct URL
-    responses: `https://[BASE44_DOMAIN]/api/responses`         // Please replace with correct URL
+    conversations: `${BASE44_API_BASE}/entities/ChatConversation/records?filter_by=%7B%22status%22%3A%20%22active%22%7D&sort_by=-created_date&limit=1`,
+    updateConversation: (conversationId) => `${BASE44_API_BASE}/entities/ChatConversation/records/${conversationId}`
 };
 
 // Track processed conversations
@@ -875,9 +876,9 @@ class IplanMCPServer {
         };
     }
 
-    // Base44 Integration Functions - Simplified approach
+    // Base44 Integration Functions - Real API implementation
     async checkForNewMessages() {
-        console.log("Checking for new conversations...");
+        console.log("Checking for new conversations via Base44 API...");
         
         if (!base44Config.appId || !base44Config.apiKey) {
             console.log("Base44 credentials not configured");
@@ -885,59 +886,114 @@ class IplanMCPServer {
         }
         
         try {
-            // For now, we'll use a mock approach until you provide the correct API endpoints
-            console.log("Base44 polling active - waiting for correct API endpoints");
-            console.log(`App ID: ${base44Config.appId}`);
-            console.log("Please provide the correct Base44 API endpoints to complete integration");
-            
-            // TODO: Replace with actual API call when correct endpoints are provided
-            // Example of what the call should look like:
-            /*
-            const response = await fetch('CORRECT_BASE44_API_URL', {
+            const response = await fetch(BASE44_API_ENDPOINTS.conversations, {
                 method: 'GET',
                 headers: {
                     'Authorization': `Bearer ${base44Config.apiKey}`,
                     'Content-Type': 'application/json'
-                }
+                },
+                timeout: 10000
             });
-            */
+
+            if (!response.ok) {
+                throw new Error(`Base44 API error: ${response.status} ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            
+            if (!data.success) {
+                console.log("No success flag in Base44 response");
+                return;
+            }
+
+            const conversations = data.data || [];
+            console.log(`✅ Found ${conversations.length} active conversation(s)`);
+
+            for (const conversation of conversations) {
+                // Check if conversation has messages and hasn't been processed
+                if (!conversation.messages || conversation.messages.length === 0) {
+                    console.log(`Skipping conversation ${conversation.id} - no messages`);
+                    continue;
+                }
+
+                const lastMessage = conversation.messages[conversation.messages.length - 1];
+                
+                // Process only user messages that haven't been processed yet
+                if (lastMessage.role === 'user' && !processedConversationIds.has(conversation.id)) {
+                    console.log(`🔥 NEW MESSAGE in conversation ${conversation.id}:`);
+                    console.log(`Content: "${lastMessage.content}"`);
+                    console.log(`Created: ${conversation.created_date}`);
+                    
+                    // Mark as being processed
+                    processedConversationIds.add(conversation.id);
+                    
+                    // Process the conversation
+                    await this.processAndRespond(conversation);
+                } else if (processedConversationIds.has(conversation.id)) {
+                    console.log(`Conversation ${conversation.id} already processed, skipping`);
+                }
+            }
             
         } catch (error) {
-            console.error("Error in Base44 integration:", error.message);
+            console.error("❌ Error checking Base44 messages:", error.message);
         }
     }
 
     async processAndRespond(conversation) {
-        const userQuery = conversation.messages.find(m => m.role === 'user').content;
-        console.log(`Processing query: "${userQuery}"`);
+        const lastMessage = conversation.messages[conversation.messages.length - 1];
+        const userQuery = lastMessage.content;
+        
+        console.log(`🤖 Processing user query: "${userQuery}"`);
+        console.log(`📅 Message timestamp: ${lastMessage.timestamp}`);
 
         try {
-            // Simple AI logic to choose tool based on keywords
+            // Enhanced AI logic to choose tool based on keywords
             let toolToCall = 'search_plans'; // default
             let toolArgs = {};
 
-            if (userQuery.includes('מספר') || userQuery.includes('תכנית')) {
+            // Hebrew and English keyword detection
+            const queryLower = userQuery.toLowerCase();
+            
+            if (queryLower.includes('מספר') || queryLower.includes('תכנית') || 
+                queryLower.includes('plan') || queryLower.includes('details')) {
                 toolToCall = 'get_plan_details';
                 // Extract plan number if possible
-                const planMatch = userQuery.match(/\d+/);
+                const planMatch = userQuery.match(/[\d\/\-]+/);
                 if (planMatch) {
                     toolArgs = { planNumber: planMatch[0] };
                 }
-            } else if (userQuery.includes('מיקום') || userQuery.includes('קואורדינט')) {
+            } else if (queryLower.includes('מיקום') || queryLower.includes('קואורדינט') || 
+                       queryLower.includes('location') || queryLower.includes('coordinates')) {
                 toolToCall = 'search_by_location';
-                toolArgs = { x: 35.2137, y: 31.7683, radius: 1000 }; // Jerusalem default
+                // Try to extract coordinates, otherwise use Tel Aviv default
+                const coordMatch = userQuery.match(/(\d+\.?\d*),?\s*(\d+\.?\d*)/);
+                if (coordMatch) {
+                    toolArgs = { 
+                        x: parseFloat(coordMatch[1]), 
+                        y: parseFloat(coordMatch[2]), 
+                        radius: 1000 
+                    };
+                } else {
+                    toolArgs = { x: 34.7818, y: 32.0853, radius: 1000 }; // Tel Aviv default
+                }
             } else {
-                // Extract search terms
-                const districts = ['תל אביב', 'ירושלים', 'חיפה', 'צפון', 'מרכז', 'דרום'];
-                const foundDistrict = districts.find(d => userQuery.includes(d));
+                // Enhanced search terms extraction
+                const districts = ['תל אביב', 'ירושלים', 'חיפה', 'צפון', 'מרכז', 'דרום', 'tel aviv', 'jerusalem', 'haifa'];
+                const foundDistrict = districts.find(d => queryLower.includes(d.toLowerCase()));
+                
+                // Extract land use keywords
+                const landUses = ['מגורים', 'מסחר', 'תעשיה', 'ציבורי', 'residential', 'commercial', 'industrial'];
+                const foundLandUse = landUses.find(l => queryLower.includes(l.toLowerCase()));
                 
                 toolArgs = {
-                    searchTerm: userQuery.substring(0, 50), // First 50 chars
-                    district: foundDistrict || undefined
+                    searchTerm: userQuery.substring(0, 100), // First 100 chars
+                    district: foundDistrict || undefined,
+                    landUse: foundLandUse || undefined
                 };
             }
 
-            console.log(`AI decided to use tool: ${toolToCall} with args:`, toolArgs);
+            console.log(`🎯 Selected tool: ${toolToCall}`);
+            console.log(`📋 Tool arguments:`, toolArgs);
 
             // Call the appropriate tool function
             let result;
@@ -952,33 +1008,71 @@ class IplanMCPServer {
                     result = await this.searchByLocation(toolArgs.x, toolArgs.y, toolArgs.radius);
                     break;
                 default:
-                    result = { content: [{ type: 'text', text: 'כלי לא זמין' }] };
+                    result = { content: [{ type: 'text', text: 'כלי לא זמין - אנא נסה שוב' }] };
             }
 
-            // Send response back to base44
+            console.log(`📊 Tool execution completed for ${toolToCall}`);
+
+            // Send response back to Base44
             await this.sendResponseToBase44(conversation.id, toolToCall, result);
 
         } catch (error) {
-            console.error(`Error processing conversation ${conversation.id}:`, error);
+            console.error(`❌ Error processing conversation ${conversation.id}:`, error.message);
+            
+            // Send error response to Base44
             await this.sendResponseToBase44(conversation.id, 'error', {
-                content: [{ type: 'text', text: `שגיאה: ${error.message}` }]
+                content: [{ type: 'text', text: `שגיאה בעיבוד הבקשה: ${error.message}\n\nאנא נסה שוב מאוחר יותר.` }]
             });
         }
     }
 
     async sendResponseToBase44(conversationId, toolName, result) {
         try {
-            console.log(`Preparing to send response for conversation ${conversationId}`);
-            console.log(`Tool: ${toolName}, Result: ${JSON.stringify(result).substring(0, 100)}...`);
+            console.log(`📤 Sending response for conversation ${conversationId}`);
+            console.log(`Tool used: ${toolName}`);
             
-            // TODO: Implement actual API call when correct endpoints are provided
-            console.log("Response ready to send - waiting for correct Base44 API endpoints");
+            // First, add our response message to the conversation
+            const responseMessage = {
+                id: `msg_${Date.now()}`,
+                role: "assistant",
+                content: result.content[0].text,
+                timestamp: new Date().toISOString(),
+                tool_used: toolName
+            };
             
-            // Allow new messages in same conversation after 1 minute
-            setTimeout(() => processedConversationIds.delete(conversationId), 60000);
+            console.log(`Response preview: ${result.content[0].text.substring(0, 100)}...`);
+            
+            // Update conversation status to archived as per Base44 specification
+            const updateResponse = await fetch(BASE44_API_ENDPOINTS.updateConversation(conversationId), {
+                method: 'PATCH',
+                headers: {
+                    'Authorization': `Bearer ${base44Config.apiKey}`,
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    status: "archived"
+                }),
+                timeout: 10000
+            });
+
+            if (!updateResponse.ok) {
+                throw new Error(`Failed to archive conversation: ${updateResponse.status} ${updateResponse.statusText}`);
+            }
+
+            console.log(`✅ Successfully processed and archived conversation ${conversationId}`);
+            console.log(`🎯 Tool: ${toolName} | Status: archived`);
+            
+            // Remove from processed set after 5 minutes to allow reprocessing if needed
+            setTimeout(() => {
+                processedConversationIds.delete(conversationId);
+                console.log(`🔄 Conversation ${conversationId} removed from processed cache`);
+            }, 300000);
 
         } catch (error) {
-            console.error("Error in Base44 response handler:", error.message);
+            console.error(`❌ Error sending response to Base44 for conversation ${conversationId}:`, error.message);
+            
+            // Remove from processed set on error so it can be retried
+            setTimeout(() => processedConversationIds.delete(conversationId), 30000);
         }
     }
 
