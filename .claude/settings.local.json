@@ -17,7 +17,8 @@
       "Bash(git push:*)",
       "WebFetch(domain:ags.iplan.gov.il)",
       "WebFetch(domain:www.iplan.gov.il)",
-      "WebFetch(domain:mavat.iplan.gov.il)"
+      "WebFetch(domain:mavat.iplan.gov.il)",
+      "WebFetch(domain:ims.gov.il)"
     ],
     "deny": []
   }
