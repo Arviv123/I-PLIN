@@ -6,8 +6,8 @@ import fetch from 'node-fetch';
 import express from 'express';
 import cors from 'cors';
 
-// Base URL for Iplan services - Updated URL
-const BASE_URL = "https://ims.gov.il/arcgis/rest/services/IplanPublic";
+// Base URL for Iplan services - MAVAT API
+const BASE_URL = "https://mavat.iplan.gov.il/rest";
 
 class IplanMCPServer {
     server;
@@ -48,7 +48,7 @@ class IplanMCPServer {
         // Test Iplan connectivity
         this.app.get('/test-iplan', async (req, res) => {
             try {
-                const testUrl = `${BASE_URL}/Xplan/MapServer?f=json`;
+                const testUrl = `${BASE_URL}/api/Plans`;
                 const response = await fetch(testUrl);
                 const data = await response.json();
                 res.json({
@@ -62,7 +62,7 @@ class IplanMCPServer {
                     status: 'error',
                     iplan_connectivity: 'failed',
                     error: error.message,
-                    url_tested: `${BASE_URL}/Xplan/MapServer?f=json`
+                    url_tested: testUrl
                 });
             }
         });
