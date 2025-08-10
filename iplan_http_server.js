@@ -49,20 +49,34 @@ class IplanMCPServer {
         this.app.get('/test-iplan', async (req, res) => {
             try {
                 const testUrl = `${BASE_URL}/api/Plans`;
-                const response = await fetch(testUrl);
+                console.log(`Testing Iplan connectivity to: ${testUrl}`);
+                
+                const response = await fetch(testUrl, {
+                    method: 'GET',
+                    headers: {
+                        'User-Agent': 'Mozilla/5.0 (compatible; IplanMCPServer/1.0)',
+                        'Accept': 'application/json, */*'
+                    },
+                    timeout: 10000
+                });
+                
+                console.log(`Response status: ${response.status}`);
                 const data = await response.json();
+                
                 res.json({
                     status: 'success',
                     iplan_connectivity: 'working',
                     url_tested: testUrl,
+                    response_status: response.status,
                     response_data: data
                 });
             } catch (error) {
+                console.error('Iplan test error:', error);
                 res.json({
                     status: 'error',
                     iplan_connectivity: 'failed',
                     error: error.message,
-                    url_tested: testUrl
+                    url_tested: `${BASE_URL}/api/Plans`
                 });
             }
         });
