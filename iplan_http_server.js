@@ -25,9 +25,12 @@ const base44Config = {
     apiKey: process.env.BASE44_API_KEY || null
 };
 
-// Base44 API URLs - Correct endpoints provided
+// Base44 API URLs - Testing different approaches
 const BASE44_API_BASE = `https://www.base44.com/api/v1/app/${process.env.BASE44_APP_ID || base44Config.appId}`;
 const BASE44_API_ENDPOINTS = {
+    // Try simple approach first
+    conversationsSimple: `${BASE44_API_BASE}/entities/ChatConversation/records`,
+    // Original with filters
     conversations: `${BASE44_API_BASE}/entities/ChatConversation/records?filter_by=%7B%22status%22%3A%20%22active%22%7D&sort_by=-created_date&limit=1`,
     updateConversation: (conversationId) => `${BASE44_API_BASE}/entities/ChatConversation/records/${conversationId}`
 };
@@ -886,17 +889,54 @@ class IplanMCPServer {
         }
         
         try {
-            const response = await fetch(BASE44_API_ENDPOINTS.conversations, {
-                method: 'GET',
-                headers: {
-                    'Authorization': `Bearer ${base44Config.apiKey}`,
-                    'Content-Type': 'application/json'
-                },
-                timeout: 10000
-            });
-
-            if (!response.ok) {
-                throw new Error(`Base44 API error: ${response.status} ${response.statusText}`);
+            // Try the simple endpoint first
+            let response;
+            let apiUrl;
+            
+            try {
+                apiUrl = BASE44_API_ENDPOINTS.conversationsSimple;
+                console.log(`🔗 Trying simple Base44 API: ${apiUrl}`);
+                console.log(`🔑 Using API Key: ${base44Config.apiKey?.substring(0, 8)}...`);
+                
+                response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${base44Config.apiKey}`,
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'I-PLIN-Server/1.0'
+                    },
+                    timeout: 10000
+                });
+                
+                console.log(`📞 Simple API Response Status: ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    throw new Error(`Simple API failed: ${response.status}`);
+                }
+            } catch (simpleError) {
+                console.log(`⚠️  Simple API failed (${simpleError.message}), trying filtered API...`);
+                
+                apiUrl = BASE44_API_ENDPOINTS.conversations;
+                console.log(`🔗 Trying filtered Base44 API: ${apiUrl}`);
+                
+                response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${base44Config.apiKey}`,
+                        'Content-Type': 'application/json',
+                        'User-Agent': 'I-PLIN-Server/1.0'
+                    },
+                    timeout: 10000
+                });
+                
+                console.log(`📞 Filtered API Response Status: ${response.status} ${response.statusText}`);
+                
+                if (!response.ok) {
+                    // Get the actual response body for debugging
+                    const errorText = await response.text();
+                    console.log(`❌ Error response body: ${errorText.substring(0, 200)}`);
+                    throw new Error(`Base44 API error: ${response.status} ${response.statusText}`);
+                }
             }
 
             const data = await response.json();
