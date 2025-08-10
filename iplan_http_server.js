@@ -162,7 +162,42 @@ class IplanMCPServer {
                             }
                         }
                     },
-                    // שאר הכלים...
+                    {
+                        name: 'get_plan_details',
+                        description: 'קבלת פרטי תכנית ספציפית לפי מספר תכנית',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                planNumber: {
+                                    type: 'string',
+                                    description: 'מספר התכנית'
+                                }
+                            },
+                            required: ['planNumber']
+                        }
+                    },
+                    {
+                        name: 'search_by_location',
+                        description: 'חיפוש תכניות לפי מיקום גיאוגרפי',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                x: {
+                                    type: 'number',
+                                    description: 'קואורדינטת X (longitude)'
+                                },
+                                y: {
+                                    type: 'number', 
+                                    description: 'קואורדינטת Y (latitude)'
+                                },
+                                radius: {
+                                    type: 'number',
+                                    description: 'רדיוס חיפוש במטרים'
+                                }
+                            },
+                            required: ['x', 'y']
+                        }
+                    }
                 ]
             };
         });
