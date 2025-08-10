@@ -26,7 +26,7 @@ const base44Config = {
 };
 
 // Base44 API URLs - Using the correct mcpBridge approach
-const BASE44_APP_URL = process.env.BASE44_APP_URL || 'https://[your-app-url]'; // You need to provide your actual app URL
+const BASE44_APP_URL = process.env.BASE44_APP_URL || 'https://real-estate-ai-advisor-fca13530.base44.app';
 const BASE44_API_ENDPOINTS = {
     getConversations: `${BASE44_APP_URL}/functions/mcpBridge?action=getConversations`,
     sendResponse: `${BASE44_APP_URL}/functions/mcpBridge?action=sendResponse`

@@ -22,7 +22,8 @@
       "WebFetch(domain:i-plin.onrender.com)",
       "Bash(curl:*)",
       "Bash(node:*)",
-      "Bash(USE_REAL_API=true node iplan_http_server.js)"
+      "Bash(USE_REAL_API=true node iplan_http_server.js)",
+      "Bash(find:*)"
     ],
     "deny": []
   }

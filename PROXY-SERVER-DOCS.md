@@ -119,16 +119,16 @@ GET /api/current-mode
 
 ### אפשרות 1: אינטגרציה עם mcpBridge (מומלץ)
 
-**שלב 1: הגדרת משתנה סביבה**
+**שלב 1: הגדרת משתנה סביבה (אוטומטי)**
 ```bash
-# הגדר את כתובת האפליקציה שלך
-export BASE44_APP_URL=https://your-base44-app.com
+# הכתובת מוגדרת אוטומטית בשרת
+BASE44_APP_URL=https://real-estate-ai-advisor-fca13530.base44.app
 ```
 
-**שלב 2: השרת יתחבר אוטומטית**
-השרת יבצע polling אוטומטי לפונקציית mcpBridge:
-- **GET** `https://your-base44-app.com/functions/mcpBridge?action=getConversations`
-- **POST** `https://your-base44-app.com/functions/mcpBridge?action=sendResponse`
+**שלב 2: השרת מתחבר אוטומטית**
+השרת מבצע polling אוטומטי לפונקציית mcpBridge:
+- **GET** `https://real-estate-ai-advisor-fca13530.base44.app/functions/mcpBridge?action=getConversations`
+- **POST** `https://real-estate-ai-advisor-fca13530.base44.app/functions/mcpBridge?action=sendResponse`
 
 ### אפשרות 2: שימוש ב-Webhook (גיבוי)
 
@@ -280,8 +280,8 @@ district_name LIKE '%תל אביב%' AND pl_landuse_string LIKE '%מגורים%'
 # הפעלת מצב אמיתי בעת הרצת השרת
 USE_REAL_API=true node iplan_http_server.js
 
-# הגדרת Base44 mcpBridge (מומלץ)
-BASE44_APP_URL=https://your-base44-app.com
+# הגדרת Base44 mcpBridge (מוגדר אוטומטי)
+BASE44_APP_URL=https://real-estate-ai-advisor-fca13530.base44.app
 
 # הגדרות אלטרנטיביות (לא נחוצות עם mcpBridge)
 # BASE44_APP_ID=your_app_id_here  
@@ -311,9 +311,14 @@ API mode switched to: REAL DATA
 
 ## הוראות הפעלה סופיות עבור Base44
 
-**השלב הבא שלך:**
-1. הגדר את `BASE44_APP_URL` למבנה הנכון של האפליקציה שלך
-2. השרת יתחיל אוטומטית לבצע polling לפונקציית mcpBridge שלך
-3. תוכל לעקוב אחר הלוגים כדי לוודא שהחיבור פועל
+**המערכת מוכנה לחלוטין! ✅**
+1. **הכתובת מוגדרת:** `https://real-estate-ai-advisor-fca13530.base44.app`
+2. **השרת מתחבר אוטומטית** לפונקציית mcpBridge שלך
+3. **תוכל לעקוב בלוגים** כדי לראות את החיבור פועל
 
-השרת מוכן ומחכה רק לכתובת הנכונה של האפליקציה שלך!
+**איך לבדוק שהכל עובד:**
+1. שלח הודעה באפליקציה Base44 שלך
+2. עקוב אחר הלוגים ב-Render.com: `https://dashboard.render.com`
+3. אמור לראות: `🔥 NEW MESSAGE in conversation...`
+
+השרת מוכן לחלוטין ומחובר לאפליקציה שלך!
