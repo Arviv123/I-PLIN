@@ -4,7 +4,7 @@
 
 **שרת I-PLIN:** `https://i-plin.onrender.com`
 **נקודות קצה ל-Zapier:**
-- **POST** `/api/zapier/query` - עיבוד שאלות
+- **POST** `/api/zapier/search` - חיפוש עם פרמטרים מובנים (מומלץ)
 - **GET** `/api/zapier/test` - בדיקת חיבור
 
 ## 🚀 שלבי ההגדרה ב-Zapier
@@ -13,15 +13,24 @@
 1. **Trigger:** Webhook by Zapier "Catch Hook" 
    - זה יקבל webhooks מהאפליקציה שלך
 2. **Action:** Webhooks by Zapier "POST" 
-   - URL: `https://i-plin.onrender.com/api/zapier/query`
+   - URL: `https://i-plin.onrender.com/api/zapier/search`
    - Method: POST
-   - Data: 
+   - Data (העבר בדיוק את השדות שמתקבלים מהטריגר):
      ```json
      {
-       "conversation_id": "{{trigger_body__conversation_id}}",
-       "user_query": "{{trigger_body__user_query}}",
-       "user_name": "{{trigger_body__user_name}}",
-       "parameters": "{{trigger_body__parameters}}"
+       "searchTerm": "{{1__searchTerm}}",
+       "minArea": "{{1__minArea}}",
+       "maxArea": "{{1__maxArea}}",
+       "selectedDistrict": "{{1__selectedDistrict}}",
+       "planAreaName": "{{1__planAreaName}}",
+       "jurstictionAreaName": "{{1__jurstictionAreaName}}",
+       "landUseString": "{{1__landUseString}}",
+       "minDate": "{{1__minDate}}",
+       "maxDate": "{{1__maxDate}}",
+       "minHousingUnits": "{{1__minHousingUnits}}",
+       "maxHousingUnits": "{{1__maxHousingUnits}}",
+       "minApprovalYear": "{{1__minApprovalYear}}",
+       "maxApprovalYear": "{{1__maxApprovalYear}}"
      }
      ```
 
@@ -76,14 +85,15 @@
 curl https://i-plin.onrender.com/api/zapier/test
 ```
 
-### בדיקת עיבוד שאלה:
+### בדיקת חיפוש מובנה:
 ```bash
-curl -X POST https://i-plin.onrender.com/api/zapier/query \
+curl -X POST https://i-plin.onrender.com/api/zapier/search \
   -H "Content-Type: application/json" \
   -d '{
-    "conversation_id": "test_123",
-    "user_query": "חפש תכניות בירושלים",
-    "user_name": "בדיקה"
+    "searchTerm": "תל אביב",
+    "selectedDistrict": "מחוז המרכז",
+    "landUseString": "מגורים",
+    "minArea": "100"
   }'
 ```
 
