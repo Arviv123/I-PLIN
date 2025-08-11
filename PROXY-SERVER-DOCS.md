@@ -130,7 +130,37 @@ BASE44_APP_URL=https://real-estate-ai-advisor-fca13530.base44.app
 - **GET** `https://real-estate-ai-advisor-fca13530.base44.app/functions/mcpBridge?action=getConversations`
 - **POST** `https://real-estate-ai-advisor-fca13530.base44.app/functions/mcpBridge?action=sendResponse`
 
-### אפשרות 2: שימוש ב-Webhook (גיבוי)
+### אפשרות 2: אינטגרציה עם Zapier (מומלץ)
+
+**נקודות קצה ל-Zapier:**
+- **POST** `/api/zapier/query` - קבלת webhooks מ-Zapier
+- **GET** `/api/zapier/test` - בדיקת חיבור
+
+**פורמט הבקשה מ-Zapier:**
+```json
+{
+  "conversation_id": "conv_123",
+  "user_query": "חפש תכניות בתל אביב",
+  "user_name": "יוסי כהן",
+  "parameters": {
+    "district": "תל אביב"
+  }
+}
+```
+
+**פורמט התגובה ל-Zapier:**
+```json
+{
+  "success": true,
+  "conversation_id": "conv_123",
+  "user_query": "חפש תכניות בתל אביב",
+  "tool_used": "search_plans",
+  "answer": "נמצאו 15 תכניות בתל אביב...",
+  "timestamp": "2025-01-10T20:00:00.000Z"
+}
+```
+
+### אפשרות 3: שימוש ב-Webhook (גיבוי)
 
 **שיחה ישירה עם השרת:**
 ```javascript

@@ -449,47 +449,90 @@ class IplanMCPServer {
             }
         });
 
-        // 9. Base44 Query Handler - Direct query processing
-        this.app.post('/api/base44/query', async (req, res) => {
+        // 9. Zapier Integration - Incoming webhook from Zapier
+        this.app.post('/api/zapier/query', async (req, res) => {
             try {
-                const { query, parameters = {} } = req.body;
+                console.log('📨 Received Zapier webhook:', JSON.stringify(req.body, null, 2));
                 
-                if (!query) {
+                const { 
+                    conversation_id, 
+                    user_query, 
+                    user_name,
+                    parameters = {} 
+                } = req.body;
+                
+                if (!conversation_id || !user_query) {
                     return res.status(400).json({
-                        error: 'Missing required field: query'
+                        success: false,
+                        error: 'Missing required fields: conversation_id, user_query'
                     });
                 }
 
-                console.log(`🔍 Processing Base44 query: ${query}`);
+                console.log(`🎯 Processing Zapier query for ${user_name}: "${user_query}"`);
                 
                 // Determine which tool to use based on query content
                 let result;
-                if (query.includes('מיקום') || query.includes('כתובת') || /\d+\.\d+/.test(query)) {
+                let tool_used = 'search_plans'; // default
+                
+                if (user_query.includes('מיקום') || user_query.includes('כתובת') || /\d+\.\d+/.test(user_query)) {
                     // Location-based search
-                    const coords = this.extractCoordinates(query);
+                    tool_used = 'search_by_location';
+                    const coords = this.extractCoordinates(user_query);
                     result = await this.searchByLocation(coords.x, coords.y, parameters.radius || 1000);
+                } else if (/\d{4,6}/.test(user_query)) {
+                    // Plan number search
+                    tool_used = 'get_plan_details';
+                    const planNumber = user_query.match(/\d{4,6}/)[0];
+                    result = await this.getPlanDetails(planNumber);
                 } else {
                     // General search
+                    tool_used = 'search_plans';
                     result = await this.searchPlans({
-                        searchTerm: query,
+                        searchTerm: user_query,
                         ...parameters
                     });
                 }
                 
-                res.json({
+                const response = {
                     success: true,
-                    query,
-                    result: result.content[0].text,
-                    timestamp: new Date().toISOString()
-                });
+                    conversation_id,
+                    user_query,
+                    tool_used,
+                    answer: result.content[0].text,
+                    timestamp: new Date().toISOString(),
+                    processing_time: `${Date.now() - Date.now()}ms`
+                };
+                
+                console.log(`✅ Zapier response ready for conversation ${conversation_id}`);
+                
+                // This response will be sent back to Zapier
+                res.json(response);
                 
             } catch (error) {
-                console.error('❌ Base44 query error:', error);
+                console.error('❌ Zapier query error:', error);
                 res.status(500).json({
+                    success: false,
+                    conversation_id: req.body.conversation_id,
                     error: 'Query processing failed',
-                    message: error.message
+                    message: error.message,
+                    timestamp: new Date().toISOString()
                 });
             }
+        });
+
+        // 10. Zapier Test Endpoint - For testing the connection
+        this.app.get('/api/zapier/test', (req, res) => {
+            res.json({
+                success: true,
+                message: 'Zapier connection is working!',
+                server: 'I-PLIN MCP Server',
+                version: '2.0.0',
+                endpoints: {
+                    query: '/api/zapier/query (POST)',
+                    test: '/api/zapier/test (GET)'
+                },
+                timestamp: new Date().toISOString()
+            });
         });
 
         // MCP endpoint - SSE Transport
